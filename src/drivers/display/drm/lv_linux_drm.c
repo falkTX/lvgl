@@ -70,8 +70,6 @@ typedef struct {
     drm_buffer_t drm_bufs[2]; /*DUMB buffers*/
     int drm_buf2;
     uint8_t * direct_render_buf;
-    uint8_t * rotated_buf;
-    size_t rotated_buf_size;
 } drm_dev_t;
 
 /**********************
@@ -840,26 +838,16 @@ static void drm_flush(lv_display_t * disp, const lv_area_t * area, uint8_t * px_
 
     {
         {
-            // TODO rotate in place and remove use of drm_dev->rotated_buf
+            /* Rotate the pixel buffer */
             lv_color_format_t cf = lv_display_get_color_format(disp);
-            uint32_t px_size = lv_color_format_get_size(cf);
             lv_display_rotation_t rotation = lv_display_get_rotation(disp);
 
             int32_t w = disp->ver_res;
             int32_t h = disp->hor_res;
 
-            /* (Re)allocate temporary buffer if needed */
-            size_t buf_size = w * h * px_size;
-            if(!drm_dev->rotated_buf || drm_dev->rotated_buf_size != buf_size) {
-                drm_dev->rotated_buf = realloc(drm_dev->rotated_buf, buf_size);
-                drm_dev->rotated_buf_size = buf_size;
-            }
-
             /* Rotate the pixel buffer */
             uint32_t w_stride = lv_draw_buf_width_to_stride(w, cf);
             uint32_t h_stride = lv_draw_buf_width_to_stride(h, cf);
-
-            lv_draw_sw_rotate(px_map, drm_dev->rotated_buf, w, h, w_stride, h_stride, rotation, cf);
 
             int idx;
             if (drm_dev->drm_buf2 == 0) {
@@ -869,7 +857,7 @@ static void drm_flush(lv_display_t * disp, const lv_area_t * area, uint8_t * px_
                 idx = 1;
                 drm_dev->drm_buf2 = 0;
             }
-            lv_memcpy(drm_dev->drm_bufs[idx].map, drm_dev->rotated_buf, buf_size);
+            lv_draw_sw_rotate(px_map, drm_dev->drm_bufs[idx].map, w, h, w_stride, h_stride, rotation, cf);
 
             /*Request buffer swap*/
             if(drm_dmabuf_set_plane(drm_dev, &drm_dev->drm_bufs[idx])) {
