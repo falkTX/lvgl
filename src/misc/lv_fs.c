@@ -72,11 +72,27 @@ lv_fs_res_t lv_fs_open(lv_fs_file_t * file_p, const char * path, lv_fs_mode_t mo
     }
 
     char letter = path[0];
-    lv_fs_drv_t * drv = lv_fs_get_drv(letter);
+    lv_fs_drv_t * drv;
+    const char * real_path;
+    if (letter == '/' || letter == '.') {
+        drv = lv_fs_get_default();
 
-    if(drv == NULL) {
-        LV_LOG_WARN("Can't open file (%s): unknown driver letter", path);
-        return LV_FS_RES_NOT_EX;
+        if(drv == NULL) {
+            LV_LOG_WARN("Can't open file (%s): no default driver available", path);
+            return LV_FS_RES_NOT_EX;
+        }
+
+        real_path = path;
+    }
+    else {
+        drv = lv_fs_get_drv(letter);
+
+        if(drv == NULL) {
+            LV_LOG_WARN("Can't open file (%s): unknown driver letter", path);
+            return LV_FS_RES_NOT_EX;
+        }
+
+        real_path = lv_fs_get_real_path(path);
     }
 
     if(drv->ready_cb) {
@@ -100,7 +116,6 @@ lv_fs_res_t lv_fs_open(lv_fs_file_t * file_p, const char * path, lv_fs_mode_t mo
         file_p->file_d = file_p;
     }
     else {
-        const char * real_path = lv_fs_get_real_path(path);
         void * file_d = drv->open_cb(drv, real_path, mode);
         if(file_d == NULL || file_d == (void *)(-1)) {
             LV_PROFILER_END;
@@ -406,6 +421,17 @@ lv_fs_drv_t * lv_fs_get_drv(char letter)
     }
 
     return NULL;
+}
+
+lv_fs_drv_t * lv_fs_get_default()
+{
+#if LV_USE_FS_POSIX
+    return &LV_GLOBAL_DEFAULT()->posix_fs_drv;
+#elif LV_USE_FS_WIN32
+    return &LV_GLOBAL_DEFAULT()->win32_fs_drv;
+#else
+    return NULL;
+#endif
 }
 
 char * lv_fs_get_letters(char * buf)
